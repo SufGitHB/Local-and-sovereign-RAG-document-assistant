@@ -4,6 +4,7 @@
 !/.gitignore
 !/.gitlab-ci.yml
 !/README.md
+!/LICENSE
 !/ai-stack/
 !/pfe-rag/
 
@@ -19,3 +20,6 @@ __pycache__/
 # Data and runtime output: documents to index, request log
 pfe-rag/docs/
 pfe-rag/eval/requests.jsonl
+
+# Local working notes for the AI coding assistant (not project documentation)
+pfe-rag/CLAUDE.md
