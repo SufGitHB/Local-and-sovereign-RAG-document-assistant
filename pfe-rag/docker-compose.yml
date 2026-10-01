@@ -1,0 +1,44 @@
+name: pfe-rag
+
+# Joins ai-stack's existing network as external — does not redefine or
+# restart anything from ~/PFE-2026/ai-stack. See CLAUDE.md.
+networks:
+  ai-net:
+    external: true
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    container_name: qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"   # REST API, handy for local inspection during dev
+    volumes:
+      - qdrant-data:/qdrant/storage
+    networks:
+      - ai-net
+
+  rag-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rag-api
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    environment:
+      # litellm and qdrant are containers on this same external network,
+      # reachable by name — no host.docker.internal needed here.
+      - LITELLM_URL=http://litellm:4000
+      - LITELLM_API_KEY=${LITELLM_MASTER_KEY}
+      - QDRANT_URL=http://qdrant:6333
+    volumes:
+      - ./docs:/app/docs:ro
+      - ./eval:/app/eval
+    networks:
+      - ai-net
+    depends_on:
+      - qdrant
+
+volumes:
+  qdrant-data:

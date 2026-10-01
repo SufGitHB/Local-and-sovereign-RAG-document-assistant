@@ -1,0 +1,38 @@
+{
+  "realm": "pfe",
+  "displayName": "PFE — Assistant RAG",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "clients": [
+    {
+      "clientId": "open-webui",
+      "name": "Open WebUI",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "${OPENWEBUI_OIDC_SECRET}",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": ["http://localhost:3000/oauth/oidc/callback"],
+      "webOrigins": ["http://localhost:3000"],
+      "attributes": {
+        "post.logout.redirect.uris": "http://localhost:3000/*"
+      }
+    }
+  ],
+  "users": [
+    {
+      "username": "demo",
+      "enabled": true,
+      "email": "demo@pfe.local",
+      "emailVerified": true,
+      "firstName": "Demo",
+      "lastName": "PFE",
+      "credentials": [
+        { "type": "password", "value": "${KC_DEMO_PASSWORD}", "temporary": false }
+      ]
+    }
+  ]
+}
