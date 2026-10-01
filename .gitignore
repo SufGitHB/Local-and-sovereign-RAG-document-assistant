@@ -1,0 +1,21 @@
+# Only the two code projects are versioned. Everything else in ~/PFE-2026
+# (report, slides, other experiments) stays out of the repository.
+/*
+!/.gitignore
+!/.gitlab-ci.yml
+!/README.md
+!/ai-stack/
+!/pfe-rag/
+
+# Secrets — use the .env.example files as templates
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Data and runtime output: documents to index, request log
+pfe-rag/docs/
+pfe-rag/eval/requests.jsonl

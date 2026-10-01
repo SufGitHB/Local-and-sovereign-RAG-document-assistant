@@ -1,0 +1,117 @@
+name: ai-stack
+
+# Ollama itself is NOT in this compose file — it's installed natively on the
+# host (bare metal, no GPU passthrough needed) and reached from containers
+# via host.docker.internal, mapped below to the docker host gateway.
+
+networks:
+  ai-net:
+    name: ai-net
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: litellm-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=litellm
+      - POSTGRES_PASSWORD=${LITELLM_DB_PASSWORD}
+      - POSTGRES_DB=litellm
+    volumes:
+      - litellm-db:/var/lib/postgresql/data
+    networks:
+      - ai-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm -d litellm"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable
+    container_name: litellm
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
+      - DATABASE_URL=postgresql://litellm:${LITELLM_DB_PASSWORD}@db:5432/litellm
+      # Single worker, single container -> no cross-process state to desync.
+      # Revisit if litellm ever scales to multiple workers/replicas.
+      - LITELLM_DISABLE_NO_REDIS_WARNING=true
+    volumes:
+      - ./litellm/config.yaml:/app/config.yaml:ro
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # so it can reach native Ollama for bge-m3
+    networks:
+      - ai-net
+    depends_on:
+      db:
+        condition: service_healthy
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    restart: unless-stopped
+    ports:
+      - "3000:8080"
+    environment:
+      # All models routed through litellm — no direct Ollama connection,
+      # so every call is auditable/loggable at one gateway (see pfe-rag's
+      # data-sovereignty startup check for why this matters).
+      - OPENAI_API_BASE_URL=http://litellm:4000/v1
+      - OPENAI_API_KEY=${LITELLM_MASTER_KEY}
+      - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY}
+      # Login through Keycloak (OpenID Connect). The discovery document is
+      # fetched container-to-container (keycloak:8080); the browser is sent
+      # to localhost:8081 — see KC_HOSTNAME* on the keycloak service.
+      - WEBUI_URL=http://localhost:3000
+      - ENABLE_OAUTH_SIGNUP=true
+      - OAUTH_MERGE_ACCOUNTS_BY_EMAIL=true
+      - OAUTH_PROVIDER_NAME=Keycloak
+      - OAUTH_CLIENT_ID=open-webui
+      - OAUTH_CLIENT_SECRET=${OPENWEBUI_OIDC_SECRET}
+      - OPENID_PROVIDER_URL=http://keycloak:8080/realms/pfe/.well-known/openid-configuration
+      - OPENID_REDIRECT_URI=http://localhost:3000/oauth/oidc/callback
+      - OAUTH_SCOPES=openid email profile
+    volumes:
+      - open-webui:/app/backend/data
+    networks:
+      - ai-net
+    depends_on:
+      - litellm
+      - keycloak
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: keycloak
+    restart: unless-stopped
+    # start-dev: HTTP and the embedded dev database — fine for this local
+    # prototype; production would use "start" with TLS and PostgreSQL.
+    # --import-realm creates the "pfe" realm on first start only.
+    command: ["start-dev", "--import-realm"]
+    ports:
+      - "8081:8080"
+    environment:
+      - KC_BOOTSTRAP_ADMIN_USERNAME=admin
+      - KC_BOOTSTRAP_ADMIN_PASSWORD=${KC_ADMIN_PASSWORD}
+      # Browser-facing URL. Back-channel calls (token, userinfo, keys) from
+      # open-webui keep using the internal name keycloak:8080.
+      - KC_HOSTNAME=http://localhost:8081
+      - KC_HOSTNAME_BACKCHANNEL_DYNAMIC=true
+      - KC_HEALTH_ENABLED=true
+      # Read by the ${...} placeholders of keycloak/realm-pfe.json at import.
+      - OPENWEBUI_OIDC_SECRET=${OPENWEBUI_OIDC_SECRET}
+      - KC_DEMO_PASSWORD=${KC_DEMO_PASSWORD}
+    volumes:
+      - ./keycloak/realm-pfe.json:/opt/keycloak/data/import/realm-pfe.json:ro
+      - keycloak-data:/opt/keycloak/data
+    networks:
+      - ai-net
+
+volumes:
+  open-webui:
+    external: true   # reuses the volume from your existing standalone container
+  litellm-db:
+  keycloak-data:
