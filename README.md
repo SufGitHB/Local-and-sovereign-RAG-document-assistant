@@ -1,40 +1,93 @@
-# Assistant documentaire RAG local et souverain
+# Local and sovereign RAG document assistant
 
-Projet de fin d’études — ENSA Fès, filière ISDIA — réalisé en binôme par
-**Soufiane EL AZZOUZI** et **Achraf BOUCHIKHI**.
+Ask questions about your own documents in natural language and get answers
+**with their sources** (file and page) — while **every model runs locally**:
+no document, question or answer ever leaves the machine.
 
-An assistant that answers questions about internal documents, with sources,
-where every model runs locally: no document or question leaves the machine.
+Final-year engineering project (PFE) — ENSA Fès, ISDIA — by
+**Soufiane EL AZZOUZI** and **Achraf BOUCHIKHI**.
+
+## What it does
+
+- **Retrieval-Augmented Generation (RAG):** documents are split into chunks,
+  embedded with `bge-m3` and stored in Qdrant; each question retrieves the
+  closest chunks, and a local LLM (`qwen2.5:3b`) answers **only** from them,
+  citing `[1]`, `[2]`…
+- **Refuses what it does not know:** a similarity threshold sends off-topic
+  questions to a fixed refusal, without calling the LLM.
+- **Verified sovereignty:** at startup the API asks the gateway where each model
+  really runs and refuses to start if one is not local; a test blocks all
+  network access to prove nothing goes out.
+- **Plugs into a chat portal:** the assistant appears as a model (`pfe-rag`) in
+  Open WebUI, with single sign-on through Keycloak.
+- **Measured, not guessed:** scripts calibrate the threshold and check that
+  retrieval finds the expected page.
+
+## Architecture
+
+```
+  browser ─▶ Open WebUI :3000 ─▶ rag-api :8001 ─▶ Qdrant :6333
+                 │                   │
+         login   │                   ▼
+                 ▼             LiteLLM :4000 ─▶ Ollama (host) :11434
+           Keycloak :8081                       qwen2.5:3b · bge-m3
+```
 
 | Folder | Content |
 |---|---|
-| [`ai-stack/`](ai-stack/README.md) | The portal: Open WebUI, LiteLLM, Keycloak (SSO), PostgreSQL — Ollama runs natively on the host |
-| [`pfe-rag/`](pfe-rag/) | The RAG layer: FastAPI API, Qdrant, indexing, routing, evaluation scripts |
+| [`ai-stack/`](ai-stack/README.md) | The portal: Open WebUI, LiteLLM (single model gateway), Keycloak (SSO), PostgreSQL |
+| [`pfe-rag/`](pfe-rag/README.md) | The RAG layer: FastAPI API, Qdrant, indexing, routing, evaluation |
+
+## Requirements
+
+- Docker with the Compose plugin
+- [Ollama](https://ollama.com) installed on the host and reachable from
+  containers (`OLLAMA_HOST=0.0.0.0:11434`), with the two models:
+  ```bash
+  ollama pull qwen2.5:3b
+  ollama pull bge-m3
+  ```
+- About 8 GB of free RAM. Runs on CPU; a GPU makes answers much faster.
 
 ## Quick start
 
 ```bash
-# 1. Portal
-cd ai-stack && cp .env.example .env && chmod 600 .env   # fill in the values
+# 1. Portal (creates the shared "ai-net" network)
+cd ai-stack
+cp .env.example .env && chmod 600 .env     # fill in random values: openssl rand -hex 24
 docker compose up -d
 
 # 2. RAG layer
-cd ../pfe-rag && cp .env.example .env && chmod 600 .env  # same LITELLM_MASTER_KEY
-mkdir -p docs && cp /path/to/your/*.pdf docs/            # documents to index (not versioned)
+cd ../pfe-rag
+cp .env.example .env && chmod 600 .env     # same LITELLM_MASTER_KEY as ai-stack
+mkdir -p docs && cp /path/to/your/*.pdf docs/
 docker compose up -d --build
 docker exec rag-api python -m rag.ingest --docs docs --reset
-
-# 3. Evaluation
-docker exec rag-api python -m eval.calibrate_threshold
-docker exec rag-api python -m eval.evaluate_retrieval
 ```
 
-Then open http://localhost:3000, log in with **Keycloak**, and pick the
-`pfe-rag` model.
+Then open http://localhost:3000, log in with **Keycloak**, and choose the
+`pfe-rag` model. The first Open WebUI admin has to make the models public
+(Admin → Settings → Models) and approve new SSO accounts (Admin → Users).
+
+## Results on the demo corpus
+
+Measured on a 173-page Deep Learning course (159 chunks, not included in the
+repository) with 20 reference questions and 10 off-topic ones:
+
+| Measure | Result |
+|---|---|
+| Correct routing (answer vs. refuse) | 100 % |
+| Expected page among the retrieved chunks (hit@5 / hit@1) | 100 % / 95 % |
+| External network calls | 0 |
+| Answer time on a laptop CPU (i7-8565U) | about one minute; refusals < 0.5 s |
 
 ## CI/CD
 
-`.gitlab-ci.yml` runs on every push: config checks (including "every LiteLLM
-model is a local Ollama model"), the data-sovereignty test, and — on the
-default branch — the build of the `rag-api` image, pushed to the GitLab
-container registry. Deployment stays manual (the stack runs on a local machine).
+`.gitlab-ci.yml` runs on every push: configuration checks (including "every
+model exposed by LiteLLM is a local Ollama model"), the data-sovereignty test,
+and — on the default branch — the build of the `rag-api` image, pushed to the
+GitLab container registry. Deployment stays manual.
+
+## License
+
+[MIT](LICENSE)
