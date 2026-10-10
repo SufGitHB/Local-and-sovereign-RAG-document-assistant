@@ -1,4 +1,8 @@
 # Local and sovereign RAG document assistant
+
+[![CI](https://github.com/SufGitHB/Local-and-sovereign-RAG-document-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/SufGitHB/Local-and-sovereign-RAG-document-assistant/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 <img width="1280" height="640" alt="GitHub banner (social preview)@1x" src="https://github.com/user-attachments/assets/71e48786-8f78-416b-b616-466dd49f408a" />
 
 
@@ -103,10 +107,10 @@ repository) with 20 reference questions and 10 off-topic ones:
 
 ## CI/CD
 
-`.gitlab-ci.yml` runs on every push: configuration checks (including "every
-model exposed by LiteLLM is a local Ollama model"), the data-sovereignty test,
-and — on the default branch — the build of the `rag-api` image, pushed to the
-GitLab container registry. Deployment stays manual.
+GitHub Actions (`.github/workflows/ci.yml`) runs on every push: configuration
+checks (including "every model exposed by LiteLLM is a local Ollama model"),
+the data-sovereignty test, and — on the default branch — the build of the
+`rag-api` image, pushed to GitHub Container Registry. Deployment stays manual.
 
 ## License
 

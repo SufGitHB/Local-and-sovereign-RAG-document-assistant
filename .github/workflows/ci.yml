@@ -1,0 +1,78 @@
+# CI for the two projects of this repository (ai-stack + pfe-rag).
+#   validate : configuration files are well-formed, and every model exposed
+#              by LiteLLM is a local Ollama model (sovereignty, at config level)
+#   test     : pytest — the data-sovereignty test of pfe-rag
+#   build    : rag-api Docker image, pushed to GitHub Container Registry
+#              (default branch only)
+# Deployment is not automated: the stack runs on a local machine.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  validate-config:
+    name: Validate config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Check configs and local-only models
+        run: |
+          pip install --quiet pyyaml
+          python - <<'EOF'
+          import json, yaml
+          for f in ("ai-stack/docker-compose.yml", "pfe-rag/docker-compose.yml"):
+              yaml.safe_load(open(f))
+          json.load(open("ai-stack/keycloak/realm-pfe.json"))
+          models = yaml.safe_load(open("ai-stack/litellm/config.yaml"))["model_list"]
+          remote = [m["model_name"] for m in models if not m["litellm_params"]["model"].startswith("ollama/")]
+          assert not remote, f"non-local models in litellm/config.yaml: {remote}"
+          print(f"config OK — {len(models)} local models")
+          EOF
+
+  test-sovereignty:
+    name: Sovereignty test
+    needs: validate-config
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pfe-rag
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run pytest
+        run: |
+          pip install --quiet -r rag/requirements-dev.txt
+          pytest -v
+
+  build-rag-api:
+    name: Build rag-api image
+    needs: test-sovereignty
+    if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and push to GitHub Container Registry
+        run: |
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}/rag-api"
+          SHORT_SHA="${GITHUB_SHA::8}"
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker build -t "$IMAGE:$SHORT_SHA" -t "$IMAGE:latest" pfe-rag
+          docker push "$IMAGE:$SHORT_SHA"
+          docker push "$IMAGE:latest"

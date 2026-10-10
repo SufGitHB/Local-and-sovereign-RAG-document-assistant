@@ -2,7 +2,7 @@
 # (report, slides, other experiments) stays out of the repository.
 /*
 !/.gitignore
-!/.gitlab-ci.yml
+!/.github/
 !/README.md
 !/LICENSE
 !/ai-stack/
