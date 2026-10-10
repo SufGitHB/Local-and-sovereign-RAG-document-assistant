@@ -1,4 +1,6 @@
 # Local and sovereign RAG document assistant
+<img width="1280" height="640" alt="GitHub banner (social preview)@1x" src="https://github.com/user-attachments/assets/71e48786-8f78-416b-b616-466dd49f408a" />
+
 
 Ask questions about your own documents in natural language and get answers
 **with their sources** (file and page) — while **every model runs locally**:
