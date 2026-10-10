@@ -26,13 +26,31 @@ Final-year engineering project (PFE) — ENSA Fès, ISDIA — by
   retrieval finds the expected page.
 
 ## Architecture
+```mermaid
+flowchart LR
+    user(["Browser"])
 
-```
-  browser ─▶ Open WebUI :3000 ─▶ rag-api :8001 ─▶ Qdrant :6333
-                 │                   │
-         login   │                   ▼
-                 ▼             LiteLLM :4000 ─▶ Ollama (host) :11434
-           Keycloak :8081                       qwen2.5:3b · bge-m3
+    subgraph stack["Docker stack"]
+        webui["Open WebUI<br/>:3000"]
+        kc["Keycloak<br/>:8081"]
+        api["rag-api<br/>:8001"]
+        qdrant[("Qdrant<br/>:6333")]
+        litellm["LiteLLM<br/>:4000"]
+    end
+
+    subgraph host["Host machine"]
+        ollama["Ollama :11434<br/>qwen2.5:3b · bge-m3"]
+    end
+
+    user -->|chat| webui
+    webui -.->|login| kc
+    webui -->|question| api
+    api -->|vector search| qdrant
+    api -->|generate + embed| litellm
+    litellm --> ollama
+
+    classDef accent fill:#14B88A,stroke:#0B7A5C,color:#0E1726
+    class api accent
 ```
 
 | Folder | Content |
